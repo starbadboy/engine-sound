@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engine Sound</title>
+<style>
+  :root { color-scheme: dark; --bg: #0e0e10; --card: #1c1c20; --text: #eee; --dim: #999; --accent: #e3262f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font: 17px system-ui, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; }
+  .hero { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; background: var(--card); border-radius: 16px; overflow: hidden; }
+  .hero img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+  .gauges { padding: 16px 24px; text-align: center; min-width: 200px; }
+  .num { font-size: 56px; font-variant-numeric: tabular-nums; line-height: 1; }
+  .dim { color: var(--dim); font-size: 14px; }
+  .tach { height: 8px; background: #333; border-radius: 4px; margin: 14px 0 6px; overflow: hidden; }
+  .tach div { height: 100%; width: 0; background: linear-gradient(90deg, #4caf50, #ffc107 70%, var(--accent)); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 16px 0; }
+  button { font: inherit; padding: 16px 24px; border-radius: 12px; border: 0; background: #333; color: var(--text); touch-action: none; user-select: none; }
+  button.primary { background: var(--accent); min-width: 200px; }
+  button.held { background: #666; }
+  .pedals { display: none; }
+  .test .pedals { display: contents; }
+  .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 24px; margin: 8px 0 24px; }
+  label { font-size: 14px; color: var(--dim); }
+  input[type=range] { width: 100%; }
+  #cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  #cars button { padding: 0 0 12px; text-align: left; overflow: hidden; background: var(--card); touch-action: auto; }
+  #cars button.active { outline: 3px solid var(--accent); }
+  #cars img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #222; margin-bottom: 8px; }
+  #cars b, #cars small { display: block; padding: 0 10px; }
+  #cars small { color: var(--dim); font-size: 13px; margin-top: 4px; }
+  #status { text-align: center; color: var(--dim); font-size: 14px; min-height: 1.4em; }
+  footer { font-size: 12px; color: var(--dim); margin-top: 24px; }
+  footer a { color: inherit; }
+  @media (max-width: 600px) { .hero { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <img id="heroImg" alt="">
+    <div class="gauges">
+      <div id="heroName"></div>
+      <div class="num" id="spd">0</div>
+      <div class="dim"><span id="unitLabel">km/h</span></div>
+      <div class="tach"><div id="tach"></div></div>
+      <div class="dim"><span id="rpm">0</span> rpm · gear <span id="gear">N</span></div>
+    </div>
+  </div>
+
+  <div class="row" id="controls">
+    <button class="primary" id="start">Start engine</button>
+    <button id="rev">REV</button>
+    <span class="pedals"><button id="gas">Gas</button><button id="brake">Brake</button></span>
+    <button id="testBtn">Test drive: off</button>
+    <button id="unitBtn">km/h</button>
+  </div>
+  <div id="status">Open while parked, press Start engine and allow location.</div>
+
+  <div class="sliders">
+    <label>Intensity <input type="range" id="intensity" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>Character <input type="range" id="character" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>Crackle <input type="range" id="crackle" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>Volume <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8"></label>
+  </div>
+
+  <div id="cars"></div>
+  <footer id="credits">Photos from Wikimedia Commons (click for author and license): </footer>
+</main>
+
+<script src="dsp.js"></script>
+<script src="cars.js"></script>
+<script src="vehicle.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const TICK = 0.02;  // control loop, seconds
+
+let car = CARS.find(c => c.id === 'camaro'), vehicle = new Vehicle(car);
+let ctx = null, chain = null, node = null, running = false, testMode = false, mph = false;
+const held = { gas: 0, brake: 0, rev: 0 };
+const gps = { speed: 0, accel: 0, shown: 0, last: null };
+let lastSpeed = 0, wakeLock = null;
+
+// ---------- Audio ----------
+
+async function initAudio() {
+  ctx = new AudioContext({ latencyHint: 'interactive' });
+  // A data: URL, not a Blob or a file path: Chrome refuses both of those on a file:// page.
+  const src = `(${dspModule.toString()})(globalThis);`;
+  await ctx.audioWorklet.addModule(`data:application/javascript;charset=utf-8,${encodeURIComponent(src)}`);
+  // synth → compressor (tames peaks on small speakers) → volume → soft clipper → speakers
+  const comp = new DynamicsCompressorNode(ctx, { threshold: -14, ratio: 4, attack: 0.003, release: 0.2 });
+  const vol = new GainNode(ctx, { gain: 0 });
+  const curve = new Float32Array(1025).map((_, i) => Math.tanh(((i - 512) / 512) * 1.5) / Math.tanh(1.5));
+  const clip = new WaveShaperNode(ctx, { curve });
+  comp.connect(vol).connect(clip).connect(ctx.destination);
+  chain = { input: comp, vol };
+}
+
+function buildSynth() {
+  if (node) { const old = node; old.port.postMessage({ load: 0 }); setTimeout(() => old.disconnect(), 300); }
+  node = new AudioWorkletNode(ctx, 'engine', { numberOfInputs: 0, outputChannelCount: [2], processorOptions: { engine: car.engine } });
+  node.connect(chain.input);
+}
+
+// ---------- GPS ----------
+
+function haversine(a, b) {
+  const r = Math.PI / 180, dLat = (b.latitude - a.latitude) * r, dLon = (b.longitude - a.longitude) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * r) * Math.cos(b.latitude * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
+function onFix(pos) {
+  const prev = gps.last, t = pos.timestamp / 1000;
+  let speed = pos.coords.speed;
+  if (speed == null && prev) speed = haversine(prev.coords, pos.coords) / Math.max(0.2, t - prev.t);
+  if (speed == null) speed = 0;
+  if (prev) gps.accel = (speed - gps.speed) / Math.max(0.2, t - prev.t);
+  gps.speed = speed; gps.last = { coords: pos.coords, t };
+  $('status').textContent = `GPS ±${Math.round(pos.coords.accuracy)} m`;
+}
+
+function onGpsError(e) {
+  $('status').textContent = `Location blocked (${e.message}). Allow location for this site in the browser settings, or use Test drive.`;
+}
+
+// ---------- Control loop ----------
+
+function tick() {
+  // Ease between 1 Hz GPS fixes so the revs glide instead of stepping.
+  gps.shown += (gps.speed - gps.shown) * 0.08;
+  const out = vehicle.step(TICK, {
+    source: testMode ? 'test' : 'gps', speed: gps.shown, accel: gps.accel,
+    gas: held.gas, brake: held.brake, rev: held.rev, intensity: +$('intensity').value,
+  });
+  if (car.engine.type === 'haunted' && lastSpeed > 5 && out.speed < 1) node.port.postMessage({ bell: 1 });
+  lastSpeed = out.speed;
+  if (out.click) node.port.postMessage({ click: out.click });
+  node.port.postMessage({
+    rpm: out.rpm, load: out.load, overrun: out.overrun, cut: out.cut, heat: out.heat, speed: out.speed, rev: out.rev,
+    character: +$('character').value, crackle: +$('crackle').value,
+  });
+  chain.vol.gain.setTargetAtTime(+$('volume').value, ctx.currentTime, 0.05);
+
+  $('spd').textContent = Math.round(mph ? out.speed / 1.609 : out.speed);
+  $('rpm').textContent = Math.round(out.rpm);
+  $('gear').textContent = out.gear;
+  const max = car.engine.redline || car.vehicle.rpmPerKmh * car.vehicle.vmax * 3.6;
+  $('tach').style.width = `${Math.min(100, (out.rpm / max) * 100)}%`;
+}
+
+async function start() {
+  if (running) { stop(); return; }
+  try {
+    if (!ctx) {
+      await initAudio();
+      setInterval(() => running && tick(), TICK * 1000);
+      if ('geolocation' in navigator) navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0 });
+      else $('status').textContent = 'No location in this browser — use Test drive.';
+    }
+    await ctx.resume();
+    buildSynth();
+    running = true;
+    $('start').textContent = 'Stop engine';
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* optional */ }
+  } catch (err) {
+    if (!chain) { ctx?.close(); ctx = null; }   // setup never finished: let the next tap retry it
+    $('status').textContent = `Could not start audio: ${err.message}`;
+  }
+}
+
+function stop() {
+  running = false;
+  chain.vol.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
+  setTimeout(() => !running && ctx.suspend(), 500);
+  $('start').textContent = 'Start engine';
+  $('rpm').textContent = 0; $('tach').style.width = '0%';
+}
+
+// ---------- UI ----------
+
+function pickCar(c) {
+  car = c; vehicle = new Vehicle(car);
+  $('heroImg').src = c.img; $('heroImg').alt = c.name; $('heroName').textContent = c.name;
+  document.querySelectorAll('#cars button').forEach(b => b.classList.toggle('active', b.dataset.id === c.id));
+  if (running) buildSynth();
+}
+
+for (const c of CARS) {
+  const b = document.createElement('button');
+  b.dataset.id = c.id;
+  b.innerHTML = `<img src="${c.img}" alt="" loading="lazy"><b>${c.name}</b><small>${c.spec}</small>`;
+  b.querySelector('img').onerror = e => e.target.remove();  // offline: still works without a photo
+  b.onclick = () => pickCar(c);
+  $('cars').appendChild(b);
+  const a = document.createElement('a');
+  a.href = `https://commons.wikimedia.org/wiki/File:${c.img.split('/')[8]}`; a.target = '_blank'; a.textContent = c.name;
+  $('credits').append(a, ' · ');
+}
+
+function holdButton(id) {
+  const b = $(id), set = v => e => { e.preventDefault(); held[id] = v; b.classList.toggle('held', !!v); };
+  b.addEventListener('pointerdown', set(1));
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, set(0)));
+}
+['gas', 'brake', 'rev'].forEach(holdButton);
+
+$('start').onclick = start;
+$('testBtn').onclick = () => {
+  testMode = !testMode; vehicle.speed = testMode ? 0 : gps.speed;
+  $('controls').classList.toggle('test', testMode);
+  $('testBtn').textContent = `Test drive: ${testMode ? 'on' : 'off'}`;
+};
+$('unitBtn').onclick = () => {
+  mph = !mph;
+  $('unitBtn').textContent = $('unitLabel').textContent = mph ? 'mph' : 'km/h';
+};
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && running) {
+    await ctx.resume();
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* optional */ }
+  }
+});
+if (!window.AudioWorkletNode) $('status').textContent = 'This browser is too old for the engine synthesizer (needs AudioWorklet).';
+
+pickCar(car);
+</script>
+</body>
+</html>
