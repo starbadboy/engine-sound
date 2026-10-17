@@ -27,7 +27,7 @@ const CARS = [
     vehicle: { type: 'ev', rpmPerKmh: 69, accel0: 7, vmax: 72 },
   },
   {
-    id: 'roadster2', name: 'Tesla Roadster (2nd gen)', spec: '3 motors · cold-gas thrusters',
+    id: 'roadster2', name: 'Tesla Roadster', spec: '3 motors · cold-gas thrusters',
     photo: 'img/tesla-roadster-thrust.png', photoNozzle: [0.07, 0.58],
     art: {
       tall: 1.25, color: '#c8102e', wheels: { x: [100, 295], r: 26 }, head: [370, 106], tail: [34, 98], nozzle: [26, 108],
