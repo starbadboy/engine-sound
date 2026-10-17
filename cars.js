@@ -16,16 +16,6 @@ const evenFiring = (order, bankOf) => order.map((cyl, i) => [i * 720 / order.len
 
 const CARS = [
   {
-    id: 'roadster', name: 'Tesla Roadster', spec: 'AC induction motor · 14,000 rpm · 1-speed',
-    art: {
-      tall: 1.35, color: '#d0141c', wheels: { x: [110, 290], r: 24 }, head: [352, 106], tail: [40, 100],
-      body: [[355, 126], [362, 110], [345, 100], [275, 94], [235, 90], [215, 74], [170, 72], [150, 80], [75, 88], [42, 92], [36, 108], [40, 126]],
-      window: [[228, 90], [213, 76], [178, 75], [160, 84]],
-    },
-    engine: { type: 'electric', sound: { orders: [[24, 0.5], [48, 0.2], [8, 0.15]], inverter: 1800, inverterGain: 0.08, bright: 6000, gain: 0.8 } },
-    vehicle: { type: 'ev', rpmPerKmh: 70, accel0: 8, vmax: 56 },
-  },
-  {
     id: 'model3', name: 'Tesla Model 3', spec: 'Permanent-magnet motor · 1-speed · ElectricZen',
     photo: 'img/electric-zen.png',
     art: {
