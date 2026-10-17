@@ -54,4 +54,18 @@ for (const car of CARS) {
   if (car.vehicle.type === 'manual') assert(clicks > 2, `${car.id}: no gear-lever clicks`);
   writeWav(path.join(__dirname, 'renders', `${car.id}.wav`), L, R);
 }
+// The thruster backflip must stay on screen (the hero sits at the top of the page) and land at rest.
+const { flipPose, FLIP_S, PIVOT } = require('./fx.js');
+let top = Infinity;
+for (let t = 0; t <= FLIP_S; t += 0.01) {
+  const p = flipPose(t), a = p.turn * Math.PI / 180;
+  for (const [x, y] of [[20, 30], [390, 30], [20, 140], [390, 140]]) {
+    const dx = (x - PIVOT[0]) * p.size, dy = (y - PIVOT[1]) * p.size;
+    top = Math.min(top, PIVOT[1] + dx * Math.sin(a) + dy * Math.cos(a) - p.lift);
+  }
+}
+const end = flipPose(FLIP_S - 1e-6);
+console.log(`flip: highest point ${top.toFixed(0)} svg units (stage padding ≈ -12)`);
+assert(top > -25, `backflip leaves the screen (top ${top})`);
+assert(Math.abs(end.turn) < 1e-6 && Math.abs(end.lift) < 0.5 && end.size === 1, 'backflip does not land at rest');
 console.log('all checks passed — listen to renders/*.wav');

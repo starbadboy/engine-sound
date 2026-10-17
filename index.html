@@ -9,8 +9,11 @@
   * { box-sizing: border-box; }
   body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font: 17px system-ui, sans-serif; }
   main { max-width: 1000px; margin: 0 auto; }
-  .hero { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; background: var(--card); border-radius: 16px; overflow: hidden; }
-  .hero img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+  .hero { position: relative; z-index: 5; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; background: var(--card); border-radius: 16px; }
+  .stage { position: relative; padding: 24px 12px 0; border-radius: 16px; background: radial-gradient(ellipse at 50% 40%, #2a2d36, #15161a 70%); }
+  .stage .car-art { display: block; width: 100%; position: relative; overflow: visible; }  /* the backflip swings past the box */
+  .road { position: absolute; left: 0; right: 0; bottom: 6px; height: 4px; background: repeating-linear-gradient(90deg, #555 0 60px, transparent 60px 120px); }
+  #fx { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 10; }
   .gauges { padding: 16px 24px; text-align: center; min-width: 200px; }
   .num { font-size: 56px; font-variant-numeric: tabular-nums; line-height: 1; }
   .dim { color: var(--dim); font-size: 14px; }
@@ -25,22 +28,20 @@
   .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 24px; margin: 8px 0 24px; }
   label { font-size: 14px; color: var(--dim); }
   input[type=range] { width: 100%; }
-  #cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  #cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
   #cars button { padding: 0 0 12px; text-align: left; overflow: hidden; background: var(--card); touch-action: auto; }
   #cars button.active { outline: 3px solid var(--accent); }
-  #cars img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #222; margin-bottom: 8px; }
+  #cars .car-art { display: block; width: 100%; padding: 14px 6px 2px; background: radial-gradient(ellipse at 50% 40%, #2a2d36, #1c1c20 75%); }
   #cars b, #cars small { display: block; padding: 0 10px; }
   #cars small { color: var(--dim); font-size: 13px; margin-top: 4px; }
   #status { text-align: center; color: var(--dim); font-size: 14px; min-height: 1.4em; }
-  footer { font-size: 12px; color: var(--dim); margin-top: 24px; }
-  footer a { color: inherit; }
   @media (max-width: 600px) { .hero { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <main>
   <div class="hero">
-    <img id="heroImg" alt="">
+    <div class="stage"><div class="road" id="road"></div><div id="heroCar"></div></div>
     <div class="gauges">
       <div id="heroName"></div>
       <div class="num" id="spd">0</div>
@@ -67,12 +68,14 @@
   </div>
 
   <div id="cars"></div>
-  <footer id="credits">Photos from Wikimedia Commons (click for author and license): </footer>
 </main>
+<canvas id="fx"></canvas>
 
 <script src="dsp.js"></script>
 <script src="cars.js"></script>
 <script src="vehicle.js"></script>
+<script src="art.js"></script>
+<script src="fx.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const TICK = 0.02;  // control loop, seconds
@@ -82,6 +85,8 @@ let ctx = null, chain = null, node = null, running = false, testMode = false, mp
 const held = { gas: 0, brake: 0, rev: 0 };
 const gps = { speed: 0, accel: 0, shown: 0, last: null };
 let lastSpeed = 0, wakeLock = null;
+const stage = new Stage($('heroCar'), $('road'), $('fx'));
+const view = { speed: 0, rpm: 0, load: 0, rev: 0 };   // latest drivetrain state, for the animation
 
 // ---------- Audio ----------
 
@@ -140,9 +145,11 @@ function tick() {
   lastSpeed = out.speed;
   if (out.click) node.port.postMessage({ click: out.click });
   node.port.postMessage({
-    rpm: out.rpm, load: out.load, overrun: out.overrun, cut: out.cut, heat: out.heat, speed: out.speed, rev: out.rev,
+    rpm: out.rpm, load: out.load, overrun: out.overrun, cut: out.cut, heat: out.heat, speed: out.speed,
+    rev: stage.flipping() ? 1 : out.rev,   // the backflip fires the jets, so they roar too
     character: +$('character').value, crackle: +$('crackle').value,
   });
+  Object.assign(view, { speed: out.speed, rpm: out.rpm, load: out.load, rev: out.rev });
   chain.vol.gain.setTargetAtTime(+$('volume').value, ctx.currentTime, 0.05);
 
   $('spd').textContent = Math.round(mph ? out.speed / 1.609 : out.speed);
@@ -178,13 +185,21 @@ function stop() {
   setTimeout(() => !running && ctx.suspend(), 500);
   $('start').textContent = 'Start engine';
   $('rpm').textContent = 0; $('tach').style.width = '0%';
+  Object.assign(view, { rpm: 0, load: 0, rev: 0 });
+}
+
+let lastFrame = performance.now();
+function animate(now) {
+  stage.frame(Math.min(0.05, (now - lastFrame) / 1000), { ...view, running });
+  lastFrame = now;
+  requestAnimationFrame(animate);
 }
 
 // ---------- UI ----------
 
 function pickCar(c) {
   car = c; vehicle = new Vehicle(car);
-  $('heroImg').src = c.img; $('heroImg').alt = c.name; $('heroName').textContent = c.name;
+  stage.setCar(c, 'hero'); $('heroName').textContent = c.name;
   document.querySelectorAll('#cars button').forEach(b => b.classList.toggle('active', b.dataset.id === c.id));
   if (running) buildSynth();
 }
@@ -192,13 +207,9 @@ function pickCar(c) {
 for (const c of CARS) {
   const b = document.createElement('button');
   b.dataset.id = c.id;
-  b.innerHTML = `<img src="${c.img}" alt="" loading="lazy"><b>${c.name}</b><small>${c.spec}</small>`;
-  b.querySelector('img').onerror = e => e.target.remove();  // offline: still works without a photo
+  b.innerHTML = `${carSvg(c.art, c.id)}<b>${c.name}</b><small>${c.spec}</small>`;
   b.onclick = () => pickCar(c);
   $('cars').appendChild(b);
-  const a = document.createElement('a');
-  a.href = `https://commons.wikimedia.org/wiki/File:${c.img.split('/')[8]}`; a.target = '_blank'; a.textContent = c.name;
-  $('credits').append(a, ' · ');
 }
 
 function holdButton(id) {
@@ -227,6 +238,7 @@ document.addEventListener('visibilitychange', async () => {
 if (!window.AudioWorkletNode) $('status').textContent = 'This browser is too old for the engine synthesizer (needs AudioWorklet).';
 
 pickCar(car);
+requestAnimationFrame(animate);
 </script>
 </body>
 </html>

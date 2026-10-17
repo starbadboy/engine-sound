@@ -8,7 +8,6 @@ resonance, gearbox, afterfire. No audio files, no account, nothing leaves the br
 
 - `dsp.js` — synthesizers (combustion, electric, haunted, thrusters)
 - `vehicle.js` — virtual gearbox and pedals
-- `cars.js` — car profiles
-- `node check.js` — renders every car to `renders/*.wav` and checks the audio
-
-Car photos are from Wikimedia Commons; authors and licenses are linked in the page footer.
+- `cars.js` — car profiles, including each car's side-view outline
+- `art.js` — draws the cars as SVG; `fx.js` — stage animation, thruster jets and backflip
+- `node check.js` — renders every car to `renders/*.wav` and checks the audio and the backflip
