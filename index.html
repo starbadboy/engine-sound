@@ -71,11 +71,14 @@
 </main>
 <canvas id="fx"></canvas>
 
-<script src="dsp.js"></script>
-<script src="cars.js"></script>
-<script src="vehicle.js"></script>
-<script src="art.js"></script>
-<script src="fx.js"></script>
+<!-- ?v= ties each page to its own scripts: GitHub Pages lets browsers cache every file for 10 min
+     separately, and an old page with new scripts breaks. ponytail: bump v by hand on every deploy
+     that changes a script; add a build step that stamps it if that gets forgotten. -->
+<script src="dsp.js?v=3"></script>
+<script src="cars.js?v=3"></script>
+<script src="vehicle.js?v=3"></script>
+<script src="art.js?v=3"></script>
+<script src="fx.js?v=3"></script>
 <script>
 const $ = id => document.getElementById(id);
 const TICK = 0.02;  // control loop, seconds
