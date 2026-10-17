@@ -5,6 +5,8 @@
 // in a 400×160 box with the road at y=140, car facing right; wheels at x with radius r;
 // head/tail lamp positions; under/over extra shapes (wings, fins, helmet); nozzle for thrusters;
 // tall: body height factor, from the real height:length ratio.
+// photo: optional side-view picture (transparent PNG, facing right); the drawing is the fallback
+// when it is missing. photoNozzle: where the thrusters leave that picture, as fractions [x, y].
 //
 // engine.firing: [crank angle °, bank] per cylinder over one 720° cycle, built from the real
 // firing order. Which bank each cylinder sits on is what gives a cross-plane V8 its burble.
@@ -25,6 +27,7 @@ const CARS = [
   },
   {
     id: 'model3', name: 'Tesla Model 3', spec: 'Permanent-magnet motor · 1-speed · ElectricZen',
+    photo: 'img/electric-zen.png',
     art: {
       tall: 1.34, color: '#9b1b24', wheels: { x: [95, 300], r: 26 }, head: [368, 104], tail: [36, 96],
       body: [[372, 126], [378, 108], [360, 98], [300, 92], [265, 88], [215, 60], [150, 60], [90, 80], [40, 88], [30, 104], [34, 126]],
@@ -35,6 +38,7 @@ const CARS = [
   },
   {
     id: 'roadster2', name: 'Tesla Roadster (2nd gen)', spec: '3 motors · cold-gas thrusters',
+    photo: 'img/tesla-roadster-thrust.png', photoNozzle: [0.07, 0.58],
     art: {
       tall: 1.25, color: '#c8102e', wheels: { x: [100, 295], r: 26 }, head: [370, 106], tail: [34, 98], nozzle: [26, 108],
       body: [[372, 126], [380, 110], [362, 100], [300, 94], [255, 88], [215, 66], [160, 66], [110, 84], [40, 90], [26, 104], [30, 126]],
@@ -46,6 +50,7 @@ const CARS = [
   },
   {
     id: 'typer', name: 'Honda Civic Type R', spec: '2.0 L turbo inline-4 · 7,000 rpm · 6-spd manual',
+    photo: 'img/city-shifter.png',
     art: {
       tall: 1.3, color: '#1e88e5', wheels: { x: [100, 295], r: 25 }, head: [366, 104], tail: [36, 92],
       body: [[370, 126], [376, 108], [358, 100], [300, 94], [265, 88], [220, 60], [120, 58], [80, 66], [40, 80], [30, 100], [34, 126]],
@@ -60,6 +65,7 @@ const CARS = [
   },
   {
     id: 'gt3', name: 'Porsche 911 GT3', spec: '4.0 L flat-6 · 9,000 rpm · 7-spd PDK',
+    photo: 'img/gt3.png',
     art: {
       tall: 1.25, color: '#e6e6e6', wheels: { x: [100, 300], r: 26 }, head: [368, 104], tail: [36, 94],
       body: [[372, 126], [378, 108], [362, 100], [315, 96], [270, 90], [225, 64], [175, 62], [120, 76], [50, 88], [30, 100], [32, 126]],
@@ -74,6 +80,7 @@ const CARS = [
   },
   {
     id: 'camaro', name: 'Chevrolet Camaro SS', spec: '6.2 L pushrod V8 · 6,500 rpm · 6-spd manual',
+    photo: 'img/v8-muscle.png',
     art: {
       tall: 1.3, color: '#f5c400', wheels: { x: [95, 300], r: 27 }, head: [374, 100], tail: [32, 92],
       body: [[374, 126], [380, 104], [368, 96], [300, 90], [245, 86], [205, 64], [155, 64], [120, 82], [50, 86], [28, 92], [28, 126]],
@@ -88,6 +95,7 @@ const CARS = [
   },
   {
     id: 'hellcat', name: 'Dodge Challenger Hellcat', spec: '6.2 L supercharged V8 · 6,200 rpm · 8-spd auto',
+    photo: 'img/hellcat.png',
     art: {
       tall: 1.3, color: '#7ac70c', wheels: { x: [92, 302], r: 27 }, head: [374, 96], tail: [30, 88],
       body: [[376, 126], [380, 100], [372, 92], [300, 88], [250, 84], [212, 62], [150, 62], [115, 80], [45, 82], [26, 88], [26, 126]],
@@ -102,6 +110,7 @@ const CARS = [
   },
   {
     id: 'urus', name: 'Lamborghini Urus', spec: '4.0 L twin-turbo V8 · 6,800 rpm · 8-spd auto',
+    photo: 'img/lamborghini-urus.png',
     art: {
       tall: 1.3, color: '#4caf50', wheels: { x: [95, 300], r: 30 }, head: [374, 92], tail: [32, 80],
       body: [[376, 124], [382, 98], [368, 86], [300, 80], [262, 76], [225, 52], [130, 52], [80, 62], [36, 72], [26, 96], [30, 124]],
@@ -116,6 +125,7 @@ const CARS = [
   },
   {
     id: 'f812', name: 'Ferrari 812 Superfast', spec: '6.5 L V12 · 8,900 rpm · 7-spd DCT',
+    photo: 'img/ferrari-v12.png',
     art: {
       tall: 1.2, color: '#b8bcc4', wheels: { x: [95, 300], r: 27 }, head: [372, 102], tail: [32, 96],
       body: [[376, 126], [382, 106], [366, 98], [300, 92], [238, 86], [200, 64], [160, 64], [105, 84], [40, 90], [26, 100], [28, 126]],
@@ -129,6 +139,7 @@ const CARS = [
   },
   {
     id: 'enzo', name: 'Ferrari Enzo', spec: '6.0 L V12 · 8,200 rpm · 6-spd F1',
+    photo: 'img/ferrari-enzo.png',
     art: {
       tall: 1.2, color: '#e10600', wheels: { x: [95, 300], r: 27 }, head: [374, 112], tail: [30, 98],
       body: [[378, 128], [388, 116], [370, 108], [310, 100], [265, 92], [235, 70], [190, 68], [150, 80], [70, 86], [30, 90], [24, 108], [28, 126]],
@@ -142,6 +153,7 @@ const CARS = [
   },
   {
     id: 'veneno', name: 'Lamborghini Veneno', spec: '6.5 L V12 · 8,400 rpm · 7-spd ISR',
+    photo: 'img/lamborghini-veneno.png',
     art: {
       tall: 1.08, color: '#8e9196', sharp: true, wheels: { x: [95, 300], r: 27 }, head: [372, 110], tail: [28, 96],
       body: [[380, 126], [390, 112], [350, 100], [290, 94], [250, 84], [225, 66], [180, 64], [140, 74], [60, 80], [30, 86], [22, 104], [30, 126]],
@@ -160,6 +172,7 @@ const CARS = [
   },
   {
     id: 'f1', name: 'Mercedes F1 W11', spec: '1.6 L turbo V6 hybrid · 15,000 rpm · 8-spd',
+    photo: 'img/slipstream.png',
     art: {
       tall: 1, color: '#1f1f22', sharp: true, open: true, wheels: { x: [85, 318], r: 30 },
       body: [[392, 124], [394, 116], [330, 110], [285, 104], [245, 98], [228, 86], [196, 84], [178, 92], [110, 94], [60, 96], [40, 100], [40, 124]],
@@ -181,6 +194,7 @@ const CARS = [
   },
   {
     id: 'hearse', name: 'Haunted Hearse', spec: '1959 Cadillac · no engine, only ghosts',
+    photo: 'img/haunted-hearse.png',
     art: {
       tall: 1.1, color: '#1b2a4a', wheels: { x: [92, 312], r: 25, whitewall: true }, head: [378, 100], tail: [28, 86],
       body: [[380, 124], [384, 104], [370, 96], [320, 92], [275, 88], [250, 62], [50, 62], [34, 70], [24, 90], [22, 124]],

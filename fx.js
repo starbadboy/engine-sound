@@ -6,6 +6,7 @@
 const FLIP_S = 1.7;
 
 const PIVOT = [200, 120];   // the flip turns round the middle of the car (svg units)
+const PHOTO_ORIGIN = [0.5, 0.6];   // the same for a picture, as fractions; matches .car-photo's CSS transform-origin
 
 // Where the backflip is at t seconds: lift (svg units), turn (degrees), squash, size, jet level.
 // The car shrinks as it leaps (away from the viewer), so a car standing on its tail still fits.
@@ -45,14 +46,23 @@ class Stage {
     this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
+  // Shows the car's picture when it has one, else its drawing (also when the picture fails to load).
   setCar(car, uid) {
-    this.car = car; this.art = car.art;
-    this.host.innerHTML = carSvg(car.art, uid);
-    this.whole = this.host.querySelector('.whole');
-    this.body = this.host.querySelector('.body');
-    this.spins = [...this.host.querySelectorAll('.spin')];
-    this.flipT = car.art.nozzle ? 0 : null;
-    if (car.art.nozzle) this.burst(15);
+    this.car = car; this.art = car.art; this.flipT = null; this.photo = null; this.spins = [];
+    const ready = () => { if (this.car === car && car.art.nozzle) { this.flipT = 0; this.burst(15); } };
+    const drawing = () => {
+      this.photo = null;
+      this.host.innerHTML = carSvg(car.art, uid);
+      this.whole = this.host.querySelector('.whole');
+      this.body = this.host.querySelector('.body');
+      this.spins = [...this.host.querySelectorAll('.spin')];
+      ready();
+    };
+    if (!car.photo) { drawing(); return; }
+    this.host.innerHTML = `<img class="car-photo" src="${car.photo}" alt="">`;
+    this.photo = this.host.firstChild;
+    this.photo.onload = ready;   // the flip needs the picture's size
+    this.photo.onerror = () => this.car === car && drawing();
   }
 
   // Is the flip firing the jets right now (for the boost sound)?
@@ -71,7 +81,7 @@ class Stage {
 
     // Engine shake and squat under load, only with the engine running.
     const shake = state.running && state.rpm ? Math.sin(this.t * state.rpm / 60 * Math.PI) * (0.25 + 0.5 * state.load) : 0;
-    this.body.setAttribute('transform', `rotate(${(-1.2 * state.load * (state.speed > 1)).toFixed(2)} 60 140) translate(0 ${shake.toFixed(2)})`);
+    const squat = -1.2 * state.load * (state.speed > 1);
 
     let pose = REST;
     if (this.flipT !== null) {
@@ -79,8 +89,15 @@ class Stage {
       if (before < 1.35 && this.flipT >= 1.35) this.dust();
       if (this.flipT >= FLIP_S) this.flipT = null;
     }
-    const [px, py] = PIVOT;
-    this.whole.setAttribute('transform', `translate(${px} ${py - pose.lift}) rotate(${pose.turn}) scale(${pose.size}) translate(${-px} ${-py}) translate(0 140) scale(1 ${pose.squash}) translate(0 -140)`);
+    if (this.photo) {
+      // A picture moves as one piece round its CSS transform-origin (PHOTO_ORIGIN).
+      const k = this.host.clientWidth / 400;
+      this.photo.style.transform = `translate(0px, ${((shake - pose.lift) * k).toFixed(1)}px) rotate(${(pose.turn + squat).toFixed(2)}deg) scale(${pose.size}, ${(pose.size * pose.squash).toFixed(3)})`;
+    } else {
+      const [px, py] = PIVOT;
+      this.body.setAttribute('transform', `rotate(${squat.toFixed(2)} 60 140) translate(0 ${shake.toFixed(2)})`);
+      this.whole.setAttribute('transform', `translate(${px} ${py - pose.lift}) rotate(${pose.turn}) scale(${pose.size}) translate(${-px} ${-py}) translate(0 140) scale(1 ${pose.squash}) translate(0 -140)`);
+    }
 
     if (art.nozzle) this.jets(dt, state, pose);
     this.draw(dt, mps);
@@ -111,6 +128,14 @@ class Stage {
   // Nozzle position (page px), jet direction and svg→px scale, following the flip.
   nozzle(pose) {
     const rect = this.host.getBoundingClientRect(), k = rect.width / 400;
+    if (this.photo) {
+      // Picture: nozzle as a fraction of the untransformed picture box, moved like the CSS transform.
+      const b = this.photoBox(rect), [fx, fy] = this.car.photoNozzle;
+      const ox = b.x + b.w * PHOTO_ORIGIN[0], oy = b.y + b.h * PHOTO_ORIGIN[1];
+      const a = pose.turn * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+      const dx = (b.x + fx * b.w - ox) * pose.size, dy = (b.y + fy * b.h - oy) * pose.size * pose.squash;
+      return { o: { x: ox + dx * c - dy * s, y: oy + dx * s + dy * c - pose.lift * k }, dir: { x: -c, y: -s }, k: k * pose.size };
+    }
     // Same steps as the transform in frame(): squash, then scale and turn round the pivot, then lift.
     const [nx, ny0] = this.art.nozzle, ny = ART_ROAD - (ART_ROAD - ny0) * (this.art.tall || 1) * pose.squash;
     const [px, py] = PIVOT, a = pose.turn * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
@@ -131,13 +156,23 @@ class Stage {
     for (let i = 0; i < n; i++) this.puff(o.x + dir.x * 40 * k * Math.random(), o.y, dir.x * 180 * k * Math.random(), -30 * k * Math.random(), (8 + 14 * Math.random()) * k);
   }
 
+  // The picture's page box before any transform (offsets are relative to the host).
+  photoBox(rect) {
+    return { x: rect.left + this.photo.offsetLeft, y: rect.top + this.photo.offsetTop, w: this.photo.offsetWidth, h: this.photo.offsetHeight };
+  }
+
   // Touching down: dust rolls out from under the tyres both ways.
   dust() {
     const rect = this.host.getBoundingClientRect(), k = rect.width / 400;
-    for (const wx of this.art.wheels.x) {
+    let tyres;
+    if (this.photo) {   // a picture's wheels sit roughly a fifth in from each end
+      const b = this.photoBox(rect);
+      tyres = [0.2, 0.8].map(f => [b.x + f * b.w, b.y + b.h]);
+    } else tyres = this.art.wheels.x.map(wx => [rect.left + wx * k, rect.top + ART_ROAD * k]);
+    for (const [tx, ty] of tyres) {
       for (let i = 0; i < 12; i++) {
         const side = Math.random() < 0.5 ? -1 : 1;
-        this.puff(rect.left + wx * k, rect.top + ART_ROAD * k, side * (60 + 120 * Math.random()) * k, -20 * k * Math.random(), 12 * k, 1.2);
+        this.puff(tx, ty, side * (60 + 120 * Math.random()) * k, -20 * k * Math.random(), 12 * k, 1.2);
         this.puffs[this.puffs.length - 1].tint = 'dust';
       }
     }

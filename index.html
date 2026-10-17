@@ -12,6 +12,9 @@
   .hero { position: relative; z-index: 5; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; background: var(--card); border-radius: 16px; }
   .stage { position: relative; padding: 24px 12px 0; border-radius: 16px; background: radial-gradient(ellipse at 50% 40%, #2a2d36, #15161a 70%); }
   .stage .car-art { display: block; width: 100%; position: relative; overflow: visible; }  /* the backflip swings past the box */
+  /* A picture sits on the road in the same 400×160 box as a drawing; fx.js reads its offsets. */
+  #heroCar { position: relative; aspect-ratio: 400 / 160; display: flex; align-items: flex-end; justify-content: center; }
+  #heroCar .car-photo { display: block; width: 92%; max-height: 92%; object-fit: contain; margin-bottom: 4%; transform-origin: 50% 60%; }
   .road { position: absolute; left: 0; right: 0; bottom: 6px; height: 4px; background: repeating-linear-gradient(90deg, #555 0 60px, transparent 60px 120px); }
   #fx { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 10; }
   .gauges { padding: 16px 24px; text-align: center; min-width: 200px; }
@@ -31,7 +34,8 @@
   #cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
   #cars button { padding: 0 0 12px; text-align: left; overflow: hidden; background: var(--card); touch-action: auto; }
   #cars button.active { outline: 3px solid var(--accent); }
-  #cars .car-art { display: block; width: 100%; padding: 14px 6px 2px; background: radial-gradient(ellipse at 50% 40%, #2a2d36, #1c1c20 75%); }
+  #cars .car-art, #cars .car-photo { display: block; width: 100%; padding: 14px 6px 2px; background: radial-gradient(ellipse at 50% 40%, #2a2d36, #1c1c20 75%); }
+  #cars .car-photo { aspect-ratio: 400 / 160; object-fit: contain; object-position: center 80%; padding: 14px 10px 8px; }
   #cars b, #cars small { display: block; padding: 0 10px; }
   #cars small { color: var(--dim); font-size: 13px; margin-top: 4px; }
   #status { text-align: center; color: var(--dim); font-size: 14px; min-height: 1.4em; }
@@ -74,11 +78,11 @@
 <!-- ?v= ties each page to its own scripts: GitHub Pages lets browsers cache every file for 10 min
      separately, and an old page with new scripts breaks. ponytail: bump v by hand on every deploy
      that changes a script; add a build step that stamps it if that gets forgotten. -->
-<script src="dsp.js?v=3"></script>
-<script src="cars.js?v=3"></script>
-<script src="vehicle.js?v=3"></script>
-<script src="art.js?v=3"></script>
-<script src="fx.js?v=3"></script>
+<script src="dsp.js?v=4"></script>
+<script src="cars.js?v=4"></script>
+<script src="vehicle.js?v=4"></script>
+<script src="art.js?v=4"></script>
+<script src="fx.js?v=4"></script>
 <script>
 const $ = id => document.getElementById(id);
 const TICK = 0.02;  // control loop, seconds
@@ -210,7 +214,9 @@ function pickCar(c) {
 for (const c of CARS) {
   const b = document.createElement('button');
   b.dataset.id = c.id;
-  b.innerHTML = `${carSvg(c.art, c.id)}<b>${c.name}</b><small>${c.spec}</small>`;
+  const drawing = carSvg(c.art, c.id);
+  b.innerHTML = `${c.photo ? `<img class="car-photo" src="${c.photo}" alt="" loading="lazy">` : drawing}<b>${c.name}</b><small>${c.spec}</small>`;
+  if (c.photo) b.querySelector('img').onerror = e => { e.target.outerHTML = drawing; };  // no picture yet: the drawing
   b.onclick = () => pickCar(c);
   $('cars').appendChild(b);
 }
